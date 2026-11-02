@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Shield — Аудит цифровой безопасности</title>
+  <meta name="description" content="Русскоязычное локальное веб-приложение для аудита цифровой безопасности. Анализ связи между паролями, профилем и цифровым следом.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Шапка приложения -->
+  <header class="app-header">
+    <div class="header-inner container">
+      <div class="logo-group">
+        <div class="logo-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="M9 12l2 2 4-4"/>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <h1 class="logo-title">Digital Shield</h1>
+          <span class="logo-subtitle">Аудит цифровой безопасности</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="offline-badge" title="Приложение работает без сетевых обращений">
+          <span class="offline-dot" aria-hidden="true"></span>
+          <span>100% Офлайн</span>
+        </div>
+        <button type="button" id="btnLoadDemo" class="btn btn-outline" title="Загрузить пример (Alex, 2008, Alex2008)">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <span>Загрузить пример</span>
+        </button>
+        <button type="button" id="btnResetAll" class="btn btn-ghost" title="Сбросить все введённые поля и расчёты">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <polyline points="1 4 1 10 7 10"/>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+          </svg>
+          <span>Сбросить всё</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Уведомление / Тост -->
+  <div id="statusToast" class="status-toast" role="status" aria-live="polite" hidden>
+    <div id="toastMessage" class="toast-message"></div>
+    <button type="button" id="toastClose" class="toast-close" aria-label="Закрыть уведомление">&times;</button>
+  </div>
+
+  <main class="container main-content">
+    <!-- Сетка формы ввода -->
+    <div class="audit-grid">
+      <!-- Раздел 1: Проверка пароля -->
+      <section class="card audit-card" aria-labelledby="pwdSectionTitle">
+        <div class="card-header">
+          <div class="step-badge">1</div>
+          <div class="card-header-text">
+            <h2 id="pwdSectionTitle" class="card-title">Проверка пароля</h2>
+            <p class="card-subtitle">Проверка стойкости и выявление типовых уязвимостей</p>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="passwordInput" class="form-label">Пароль для анализа</label>
+          <div class="input-password-wrapper">
+            <input 
+              type="password" 
+              id="passwordInput" 
+              class="form-input password-input" 
+              placeholder="Например: TestPass2026! или Alex2008" 
+              autocomplete="off" 
+              spellcheck="false"
+              aria-describedby="passwordHelp"
+            >
+            <button type="button" id="btnTogglePassword" class="btn-input-action" aria-label="Показать пароль" title="Показать или скрыть пароль">
+              <span id="pwdToggleIcon" aria-hidden="true">👁️</span>
+            </button>
+            <button type="button" id="btnClearPassword" class="btn-input-action btn-clear" aria-label="Очистить поле пароля" title="Очистить поле">
+              &times;
+            </button>
+          </div>
+          <p id="passwordHelp" class="field-hint">Пароль анализируется строго на вашем компьютере и нигде не сохраняется.</p>
+        </div>
+
+        <!-- Живой индикатор анализа пароля -->
+        <div id="passwordLiveResult" class="password-live-card">
+          <div class="metric-row">
+            <span class="metric-label">Оценка стойкости:</span>
+            <span id="pwdStatusBadge" class="badge badge-neutral">Недостаточно данных</span>
+          </div>
+          <div class="progress-bar-container" aria-hidden="true">
+            <div id="pwdRiskProgressBar" class="progress-bar" style="width: 0%;"></div>
+          </div>
+          <div class="criteria-grid">
+            <div id="critLength" class="criteria-item">
+              <span class="crit-icon">•</span>
+              <span class="crit-text">Длина (от 12 знаков)</span>
+            </div>
+            <div id="critVariety" class="criteria-item">
+              <span class="crit-icon">•</span>
+              <span class="crit-text">Наборы символов (a-z, A-Z, 0-9, спецзнаки)</span>
+            </div>
+            <div id="critSequences" class="criteria-item">
+              <span class="crit-icon">•</span>
+              <span class="crit-text">Без простых последовательностей</span>
+            </div>
+            <div id="critProfile" class="criteria-item">
+              <span class="crit-icon">•</span>
+              <span class="crit-text">Без личных данных профиля</span>
+            </div>
+          </div>
+          <div id="pwdReasonsBox" class="notes-box" hidden>
+            <div class="notes-title">Выводы анализа:</div>
+            <ul id="pwdReasonsList" class="notes-list"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Раздел 2: Аудит условного профиля -->
+      <section class="card audit-card" aria-labelledby="profileSectionTitle">
+        <div class="card-header">
+          <div class="step-badge">2</div>
+          <div class="card-header-text">
+            <h2 id="profileSectionTitle" class="card-title">Профиль</h2>
+            <p class="card-subtitle">Анализ открытости сведений (все поля необязательны)</p>
+          </div>
+        </div>
+
+        <div class="profile-fields-grid">
+          <div class="form-group">
+            <label for="nicknameInput" class="form-label">Псевдоним / Никнейм</label>
+            <input 
+              type="text" 
+              id="nicknameInput" 
+              class="form-input" 
+              placeholder="Пример: Alex, cyber_user"
+              autocomplete="off"
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="birthYearInput" class="form-label">Год рождения</label>
+            <input 
+              type="number" 
+              id="birthYearInput" 
+              class="form-input" 
+              placeholder="Пример: 2008" 
+              min="1940" 
+              max="2026"
+              autocomplete="off"
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="cityInput" class="form-label">Город</label>
+            <input 
+              type="text" 
+              id="cityInput" 
+              class="form-input" 
+              placeholder="Пример: г. Энск"
+              autocomplete="off"
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="placeInput" class="form-label">Учёба или работа</label>
+            <input 
+              type="text" 
+              id="placeInput" 
+              class="form-input" 
+              placeholder="Пример: Колледж связи"
+              autocomplete="off"
+            >
+          </div>
+        </div>
+
+        <div class="toggles-subheading">Настройки открытости контактов в профиле:</div>
+
+        <div class="switch-list">
+          <div class="switch-item">
+            <button 
+              type="button" 
+              role="switch" 
+              id="togglePhone" 
+              class="toggle-switch" 
+              aria-checked="false" 
+              aria-labelledby="labelPhone"
+            >
+              <span class="switch-thumb"></span>
+            </button>
+            <div class="switch-labels">
+              <span id="labelPhone" class="switch-title">Номер телефона открыт в профиле</span>
+              <span class="switch-description">Номер доступен для просмотра всем посетителям страницы.</span>
+            </div>
+          </div>
+
+          <div class="switch-item">
+            <button 
+              type="button" 
+              role="switch" 
+              id="toggleEmail" 
+              class="toggle-switch" 
+              aria-checked="false" 
+              aria-labelledby="labelEmail"
+            >
+              <span class="switch-thumb"></span>
+            </button>
+            <div class="switch-labels">
+              <span id="labelEmail" class="switch-title">Электронная почта открыта в профиле</span>
+              <span class="switch-description">Основной email отображается в контактных данных.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Раздел 3: Цифровой след и поведенческие привычки -->
+    <section class="card footprint-section" aria-labelledby="footprintSectionTitle">
+      <div class="card-header">
+        <div class="step-badge">3</div>
+        <div class="card-header-text">
+          <h2 id="footprintSectionTitle" class="card-title">Цифровой след и привычки</h2>
+          <p class="card-subtitle">Поведение в сети, определяющее возможность сбора данных из открытых источников (OSINT)</p>
+        </div>
+      </div>
+
+      <div class="switch-grid">
+        <div class="switch-item">
+          <button 
+            type="button" 
+            role="switch" 
+            id="toggleLocationPhotos" 
+            class="toggle-switch" 
+            aria-checked="false" 
+            aria-labelledby="labelPhoto"
+          >
+            <span class="switch-thumb"></span>
+          </button>
+          <div class="switch-labels">
+            <span id="labelPhoto" class="switch-title">Публикую фотографии, по которым можно определить место</span>
+            <span class="switch-description">Снимки с узнаваемыми ориентирами, табличками домов, фасадами или включёнными геометками.</span>
+          </div>
+        </div>
+
+        <div class="switch-item">
+          <button 
+            type="button" 
+            role="switch" 
+            id="toggleHabitsLocation" 
+            class="toggle-switch" 
+            aria-checked="false" 
+            aria-labelledby="labelHabits"
+          >
+            <span class="switch-thumb"></span>
+          </button>
+          <div class="switch-labels">
+            <span id="labelHabits" class="switch-title">Рассказываю в открытом профиле о привычках или местоположении</span>
+            <span class="switch-description">Публикация регулярных расписаний, привычных маршрутов, времени тренировок или отъездов.</span>
+          </div>
+        </div>
+
+        <div class="switch-item">
+          <button 
+            type="button" 
+            role="switch" 
+            id="togglePasswordReuse" 
+            class="toggle-switch" 
+            aria-checked="false" 
+            aria-labelledby="labelReuse"
+          >
+            <span class="switch-thumb"></span>
+          </button>
+          <div class="switch-labels">
+            <span id="labelReuse" class="switch-title">Использую один пароль на нескольких сайтах</span>
+            <span class="switch-description">Один и тот же или слегка видоизменённый пароль применяется для разных сервисов и платформ.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Панель запуска и управления -->
+    <div class="actions-strip">
+      <button type="button" id="btnRunAudit" class="btn btn-primary btn-large">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        <span>Рассчитать общий индекс безопасности</span>
+      </button>
+      <div class="actions-secondary-group">
+        <button type="button" id="btnExportHtml" class="btn btn-secondary" title="Скачать полный структурированный HTML-отчёт">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span>Сохранить отчёт (HTML)</span>
+        </button>
+        <button type="button" id="btnExportTxt" class="btn btn-secondary" title="Скачать текстовую сводку">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          <span>Сохранить отчёт (TXT)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Раздел 4: Результаты и Индекс безопасности -->
+    <section class="card results-section" aria-labelledby="resultsHeading">
+      <div class="results-header">
+        <h2 id="resultsHeading" class="results-title">Сводный индекс безопасности</h2>
+        <span id="resultsUpdatedBadge" class="results-badge">Аудит в реальном времени</span>
+      </div>
+
+      <!-- Главная шкала индекса -->
+      <div class="total-score-card">
+        <div class="gauge-column">
+          <div class="score-circle-wrapper">
+            <div id="totalScoreNumber" class="score-number">—</div>
+            <div class="score-label">Индекс риска (0–100)</div>
+          </div>
+        </div>
+        <div class="gauge-details">
+          <div class="gauge-status-row">
+            <span class="status-heading">Уровень совокупного риска:</span>
+            <span id="totalRiskBadge" class="badge badge-neutral">Недостаточно данных</span>
+          </div>
+          <div class="scale-bar-track" aria-hidden="true">
+            <div id="totalScaleFill" class="scale-bar-fill" style="width: 0%;"></div>
+          </div>
+          <div class="scale-ticks" aria-hidden="true">
+            <span>0 (Минимальный риск)</span>
+            <span>34 (Умеренный)</span>
+            <span>67 (Повышенный)</span>
+            <span>100</span>
+          </div>
+          <p id="totalExplanationText" class="score-explanation">
+            Заполните параметры в разделах выше или нажмите «Загрузить пример», чтобы система рассчитала аналитический индекс риска.
+          </p>
+          <div class="scale-rule-note">
+            <strong>Правило шкалы:</strong> чем выше индекс риска, тем больше факторов требуют внимания и настройки защиты.
+          </div>
+        </div>
+      </div>
+
+      <!-- Три раздельных индекса -->
+      <div class="sub-indices-grid">
+        <!-- 1. Пароль -->
+        <div class="sub-index-card">
+          <div class="sub-index-header">
+            <span class="sub-index-title">Безопасность пароля</span>
+            <span id="pwdSubScoreBadge" class="badge badge-neutral">—</span>
+          </div>
+          <div class="sub-index-value-row">
+            <span id="pwdSubScoreNum" class="sub-score-num">—</span>
+            <span class="sub-score-max">/ 100</span>
+          </div>
+          <p id="pwdSubDesc" class="sub-score-desc">Оценка устойчивости пароля к типовым методам подбора.</p>
+        </div>
+
+        <!-- 2. Персональные данные -->
+        <div class="sub-index-card">
+          <div class="sub-index-header">
+            <span class="sub-index-title">Раскрытие персональных данных</span>
+            <span id="profSubScoreBadge" class="badge badge-neutral">—</span>
+          </div>
+          <div class="sub-index-value-row">
+            <span id="profSubScoreNum" class="sub-score-num">—</span>
+            <span class="sub-score-max">/ 100</span>
+          </div>
+          <p id="profSubDesc" class="sub-score-desc">Объём сведений, доступных посторонним в открытом профиле.</p>
+        </div>
+
+        <!-- 3. Цифровой след -->
+        <div class="sub-index-card">
+          <div class="sub-index-header">
+            <span class="sub-index-title">Цифровой след</span>
+            <span id="footSubScoreBadge" class="badge badge-neutral">—</span>
+          </div>
+          <div class="sub-index-value-row">
+            <span id="footSubScoreNum" class="sub-score-num">—</span>
+            <span class="sub-score-max">/ 100</span>
+          </div>
+          <p id="footSubDesc" class="sub-score-desc">Поведенческие риски, повторное использование и геометки.</p>
+        </div>
+      </div>
+
+      <!-- Раздел 5: Анализ цифрового следа и цепочки сценариев -->
+      <div class="scenarios-container">
+        <h3 class="section-subheading">Моделирование возможных сценариев угроз</h3>
+        <p class="section-intro">
+          На основе указанных параметров строится причинно-следственная цепочка рисков:
+          <span class="chain-formula">«Открытые сведения → Связка данных → Возможный риск → Способ защиты»</span>.
+          Это возможные сценарии, а не гарантированные последствия.
+        </p>
+
+        <div id="scenariosList" class="scenarios-grid">
+          <div class="empty-state-notice">
+            <p>Сценарии будут сформированы после ввода параметров профиля и пароля.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Раздел 6: Персональный план рекомендаций -->
+      <div class="recommendations-container">
+        <h3 class="section-subheading">План конкретных действий по снижению рисков</h3>
+        <div id="recommendationsList" class="recs-box">
+          <p class="recs-placeholder">Рекомендации появятся после расчёта индексов.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Подвал приложения -->
+  <footer class="app-footer">
+    <div class="container footer-inner">
+      <div class="footer-left">
+        <strong>Digital Shield</strong> &copy; 2026. Комплексный аудит цифровой безопасности.
+      </div>
+      <div class="footer-right">
+        Автономный локальный режим • 0 внешних зависимостей • Данные не сохраняются
+      </div>
+    </div>
+  </footer>
+
+  <!-- Скрипты приложения (без внешних зависимостей) -->
+  <script src="security-analyzer.js"></script>
+  <script src="report-generator.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
